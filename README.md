@@ -173,8 +173,59 @@ FULL_BUILD_PROFILE=proxy-stack PROFILE_SET=quick bash scripts/coverage-test.sh
 - coverage 配置测试与固件编译并行运行，不阻塞 Release 发布时间。
 - feeds 更新失败会直接中止，避免在 GitHub Actions 中生成缺插件/缺依赖的固件。
 - Artifact 内会包含 `build.config` 与 `enabled-packages.txt`，可直接确认 WiFi 补丁、MosDNS、HomeProxy、Nikki 等功能是否进入最终配置。
+- 运行器可在手动触发时选择：`github-hosted`（默认）或 `self-hosted`。选择 `self-hosted` 走你自己注册的 runner（详见下节），避免 free 账户被锁或分钟数不够时编译中断。
 
-覆盖测试能显著降低回归风险，但不能证明固件"完全没有 bug"。无线环境、硬件状态、运营商网络、插件上游服务、运行时配置和客户端行为仍需要刷机后的真实设备验证。
+覆盖测试能显著降低回归风险，但不能证明固件“完全没有 bug”。无线环境、硬件状态、运营商网络、插件上游服务、运行时配置和客户端行为仍需要刷机后的真实设备验证。
+
+---
+
+## Self-hosted runner（free 账户被锁时仍能编译）
+
+GitHub Actions 的免费额度（私有仓 2000 分钟/月）或 billing 锁定时，github-hosted runner 会被拒绝拉 job。本 workflow 支持 `runner_type=self-hosted` 走你自己的机器。
+
+### 1. 在仓库上添加 runner
+
+1. 进入仓库页面 → **Settings** → **Actions** → **Runners** → **New self-hosted runner**
+2. 选择 Linux x64，GitHub 会给出一段注册脚本。推荐同时勾选"Disable default runners on this repo"以外的额外能力。
+3. 在 runner 标签处至少加：`linux`, `x64`, `h5000m`（默认值。如需加 GPU/快存机器也可自定义标签，运行时在 workflow_dispatch 的 `self_hosted_labels` 里填入）。
+
+### 2. 准备 runner 环境
+
+```bash
+# Ubuntu 22.04/24.04 推荐。Runner 需要以下依赖（参考 local-build.sh “安装编译依赖”步骤）：
+sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+  build-essential ccache python3 libncurses5-dev libssl-dev libgmp3-dev libmbedtls-dev \
+  zlib1g-dev autoconf automake libtool patch gcc g++ gawk gettext unzip file wget curl \
+  rsync zstd golang-go rustc cargo git ack antlr3 asciidoc binutils bison bzip2 clang cmake \
+  cpio device-tree-compiler fastjar flex gcc-multilib g++-multilib gnutls-dev gperf haveged \
+  help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev \
+  libltdl-dev libmpc-dev libmpfr-dev libncursesw5-dev libpython3-dev libreadline-dev lld llvm \
+  lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full pkgconf python3-pip python3-ply \
+  python3-pyelftools python3-setuptools qemu-utils re2c scons squashfs-tools subversion swig \
+  texinfo uglifyjs upx-ucl vim xmlto xxd
+
+# 起码 30 GB 空闲磁盘（ccache 拉满可上 50 GB）。
+# 编译时会创建 `work/_temp` 、调用 `chmod` 、`sudo` 不是必须的（自托管步骤已跳过 apt 安装）。
+```
+
+### 3. 启动 runner
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+# （从 GitHub 页面拷贝的 ./config.sh --url ... --token ...）
+./config.sh --labels linux,x64,h5000m
+./svc.sh install && ./svc.sh start    # 作为 systemd 服务运行
+```
+
+### 4. 手动触发走 self-hosted
+
+Actions → Run workflow → `runner_type` 选 `self-hosted`（默认 `linux,x64,h5000m` 标签）→ Run。任务会在你自己的 runner 上跑，不走 GitHub 额度。
+
+### 5. 重要限制
+
+- 如果 GitHub **org 整体**被锁定（例如未付款超过某些阈值），self-hosted runner 也可能拉不到 job——这种情况必须先在 https://github.com/settings/billing 解锁。
+- self-hosted runner 必须是本 workflow 信任的机器。GitHub 仓库的设置默认要求组织所有者批准新 runner。
+- 不要让 runner 以 root 运行（用普通用户 + sudo；脚本里 `apt-get` / 磁盘清理步骤会在 self-hosted 下自动跳过）。
 
 ---
 

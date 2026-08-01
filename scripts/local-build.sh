@@ -773,6 +773,68 @@ ensure_external_luci_i18n_packages() {
     "AdGuardHome Chinese translation"
 }
 
+patch_qmodem_depends() {
+  # FUjr/QModem 的 qmodem/Makefile 里有一段：
+  #   +PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan-ctrl \
+  #   +PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan-mbim \
+  # 这两个 dep 实际上没有任何 feed 提供（它们既不是独立的 Makefile，
+  # 也不是上游 kernel 里的 kmod 子包），OpenWrt 的 package-metadata.pl
+  # 会在 feeds install 阶段反复报：
+  #   WARNING: Makefile '...' has a dependency on 'PACKAGE_..._GENERIC_MHI_PCIe_DRIVER:', which does not exist
+  #   WARNING: Makefile '...' has a dependency on '-ctrl', which does not exist
+  #   WARNING: Makefile '...' has a dependency on '-mbim', which does not exist
+  # 即便去掉 `\` 续行也无济于事——它们的解析结果本身就是空 dep + 残留 "-ctrl/-mbim"。
+  # 这里的 sed 把这两行去掉；前面已有的 +kmod-mhi-wwan 保持原样（在 feeds install 后
+  # 已经通过 apply_package_fixes 末尾的 sed 's/+\?kmod-mhi-wwan//g' 处理）。
+  #
+  # 同时按用户要求把所有 `\` 续行合并为单行，让 Make 直接按 token 解析，
+  # 避免某些解析器对 line-continuation + 末尾特殊字符的边界歧义。
+  local qmodem_mf="package/feeds/qmodem/qmodem/Makefile"
+  [ -f "$qmodem_mf" ] || return 0
+
+  log "Patching qmodem Makefile: drop unresolved -ctrl/-mbim conditional deps and collapse \\ continuations"
+  cp -f "$qmodem_mf" "$qmodem_mf.orig"
+
+  # 1) 去掉那两个无法解析的条件依赖行（包括前面 TAB 和末尾的 ` \`）
+  sed -i '/^[[:space:]]*+PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan-ctrl[[:space:]]*\\$/d' "$qmodem_mf"
+  sed -i '/^[[:space:]]*+PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan-mbim[[:space:]]*\\$/d' "$qmodem_mf"
+
+  # 2) 把 `\` 行尾续行符去掉（让 Make 把多行值视为单行 tokens，避开某些解析路径）
+  #    只处理 DEPENDS 块；用 awk 按行扫描，进入 DEPENDS:= 起到 endef 之间做合并
+  awk '
+    /^[[:space:]]*DEPENDS:=/ { in_depends=1 }
+    in_depends && /^endef/ { in_depends=0 }
+    in_depends {
+      # 去掉行尾的续行符（` \` 或 `\`）
+      sub(/[[:space:]]*\\$/, "")
+      # 合并多行：在当前行末尾加一个空格分隔
+      if (buf != "") buf = buf " "
+      buf = buf $0
+      next
+    }
+    {
+      if (buf != "") { print buf; buf="" }
+      print
+    }
+    END { if (buf != "") print buf }
+  ' "$qmodem_mf" > "$qmodem_mf.new" && mv "$qmodem_mf.new" "$qmodem_mf"
+
+  # 简单健全性校验：DEPENDS 行应仍然包含关键 token（防 sed 把整段 DEPENDS 删没了）
+  if ! grep -q '+PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan ' "$qmodem_mf" \
+     && ! grep -q '+PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan"' "$qmodem_mf" \
+     && ! grep -q '+PACKAGE_luci-app-qmodem_GENERIC_MHI_PCIe_DRIVER:kmod-mhi-wwan$' "$qmodem_mf"; then
+    die "patch_qmodem_depends: DEPENDS rewrite lost expected token (kmod-mhi-wwan). Restoring backup."
+  fi
+
+  # 校验：残留的 -ctrl/-mbim 行应已不存在
+  if grep -E 'kmod-mhi-wwan-(ctrl|mbim)' "$qmodem_mf"; then
+    die "patch_qmodem_depends: -ctrl/-mbim still present after patch; upstream Makefile changed?"
+  fi
+
+  rm -f "$qmodem_mf.orig"
+  log "qmodem Makefile patched successfully"
+}
+
 patch_homeproxy_no_wan_default_interface() {
   local hp_client="package/luci-app-homeproxy/root/etc/homeproxy/scripts/generate_client.uc"
   [ -f "$hp_client" ] || return 0
@@ -901,6 +963,7 @@ apply_package_fixes() {
   patch_mtwifi_apcli_bssid_budget
   verify_mtwifi_patch
   ensure_external_luci_i18n_packages
+  patch_qmodem_depends
 
   local ebtables_makefile="package/network/utils/ebtables/Makefile"
   if [ -f "$ebtables_makefile" ] && grep -qE 'git(://|s://git\.)netfilter\.org/ebtables' "$ebtables_makefile"; then

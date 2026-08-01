@@ -5,6 +5,19 @@ on:
     - cron: '0 16 * * 0'  # 每周一北京时间 00:00
   workflow_dispatch:
     inputs:
+      runner_type:
+        description: '运行器类型（github-hosted 默认；free 账户被锁时选 self-hosted 跑自己的机器）'
+        required: false
+        default: github-hosted
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+      self_hosted_labels:
+        description: '自托管 runner 标签（逗号分隔；仅 runner_type=self-hosted 时生效，默认 linux,x64,h5000m）'
+        required: false
+        default: 'linux,x64,h5000m'
+        type: string
       enable_adguardhome:
         description: '启用 AdGuardHome'
         required: false
@@ -111,11 +124,13 @@ env:
   GOSUMDB: sum.golang.google.cn
   DOWNLOAD_MIRROR: "https://mirrors.tuna.tsinghua.edu.cn/openwrt/sources;https://mirrors.ustc.edu.cn/openwrt/sources;https://mirrors.bfsu.edu.cn/openwrt/sources"
   GITHUB_PROXY_PREFIXES: "https://ghfast.top/ https://gh-proxy.com/ https://gh.llkk.cc/"
+  # 运行器选择辅助变量：runner_type=self-hosted 时使用 self_hosted_labels，否则用 github-hosted 默认
+  RUNNER_LABELS_JSON: ${{ format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04') }}
 
 jobs:
   # ─── 覆盖性配置测试（与固件编译并行，不阻塞最终 Release）─────────────────
   config-coverage:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(env.RUNNER_LABELS_JSON) }}
     timeout-minutes: 60
     if: github.event.inputs.run_config_coverage == true
     steps:
@@ -164,7 +179,8 @@ jobs:
             echo "$k=$v" >> "$GITHUB_OUTPUT"
           done
 
-      - name: 安装编译依赖
+      - name: 安装编译依赖（仅 github-hosted 跑；自托管需预装依赖）
+        if: github.event.inputs.runner_type != 'self-hosted'
         shell: bash
         run: |
           set -euo pipefail
@@ -197,7 +213,7 @@ jobs:
 
   # ─── 固件编译（与 coverage 并行）──────────────────────────────────────
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(env.RUNNER_LABELS_JSON) }}
     timeout-minutes: 600
     steps:
       - name: 检出代码
@@ -241,7 +257,8 @@ jobs:
             echo "$k=$v" >> "$GITHUB_OUTPUT"
           done
 
-      - name: 释放磁盘空间
+      - name: 释放磁盘空间（仅 github-hosted 跑）
+        if: github.event.inputs.runner_type != 'self-hosted'
         shell: bash
         run: |
           set -euo pipefail
@@ -257,7 +274,8 @@ jobs:
           sudo apt-get -y clean
           df -h /
 
-      - name: 安装编译依赖
+      - name: 安装编译依赖（仅 github-hosted 跑；自托管需预装依赖）
+        if: github.event.inputs.runner_type != 'self-hosted'
         shell: bash
         run: |
           set -euo pipefail
