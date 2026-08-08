@@ -150,6 +150,7 @@ FULL_BUILD_PROFILE=proxy-stack PROFILE_SET=quick bash scripts/coverage-test.sh
 | `ENABLE_ADBYBY_PLUS` | `false` | Adbyby Plus Lite |
 | `ENABLE_ORIGINAL_MODEM` | `false` | 上游原版 modem（与 QModem 互斥） |
 | `ENABLE_EASYMESH` | `true` | EasyMesh / 802.11s mesh 支持 |
+| `ENABLE_MWAN3` | `false` | MWAN3 MultiWAN Manager（多 WAN 负载均衡/故障切换，含 LuCI 界面、kmod-vrf 及全部 kmod-ipt-* 内核依赖） |
 
 ### 下载优化变量
 
@@ -244,6 +245,8 @@ Actions → Run workflow → `runner_type` 选 `self-hosted`（默认 `linux,x64
 UPnP 修复：`luci-app-upnp` 依赖虚拟包 `miniupnpd`，fw4 构建中显式选择 `miniupnpd-nftables` 与 `rpcd-mod-ucode`，避免 `defconfig` 将 `luci-app-upnp` 自动关闭。若上游源码引用 `libcrypt-compat` 但当前 feeds 未定义该包，构建脚本会补一个 glibc 条件下的兼容包定义，避免包扫描阶段刷屏 warning。
 
 EasyMesh / mesh 支持：当前上游分支没有独立的 `luci-app-easymesh` 包；MTK EasyMesh/MAP 能力以内置 WiFi 驱动源码和 MT7992 `map_*.dat` profile 形式存在。`ENABLE_EASYMESH=true` 时脚本会启用 `mesh11sd` 与 `wpad-mesh-openssl`，替换基础 `wpad` 变体以保留 mesh 能力，并校验 MTK `feature/map` 源文件和 MT7992 MAP profile 是否仍在上游源码中。
+
+MWAN3 多 WAN 支持：`ENABLE_MWAN3=true` 会同时启用 `mwan3` 后台、`luci-app-mwan3` 与中文包、`kmod-vrf`（同时设置 `CONFIG_KERNEL_NET_L3_MASTER_DEV=y` 解锁该内核符号，修复 LuCI 添加设备时提示需要 `kmod-vrf` 的问题），以及 `kmod-ipt-ipset` / `kmod-ipt-conntrack-extra` / `kmod-ipt-ipopt` / `kmod-ipt-raw` / `kmod-nf-conncount` 等内核模块和 `iptables-mod-conntrack-extra` / `iptables-mod-ipopt` / `ipset` 等用户态组件。这能避免运行时用 opkg 安装 `luci-app-mwan3` 时反复报 "依赖的软件包 kmod-ipt-* 在所有仓库都未提供"。所有 kmod 都在 image 构建时打入，不需要刷机后手动装。
 
 ---
 

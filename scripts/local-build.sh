@@ -45,6 +45,7 @@ ENABLE_HOMEPROXY="${ENABLE_HOMEPROXY:-false}"
 ENABLE_ADBYBY_PLUS="${ENABLE_ADBYBY_PLUS:-false}"
 ENABLE_ORIGINAL_MODEM="${ENABLE_ORIGINAL_MODEM:-false}"
 ENABLE_EASYMESH="${ENABLE_EASYMESH:-true}"
+ENABLE_MWAN3="${ENABLE_MWAN3:-false}"
 
 INSTALL_DEPS=false
 PREPARE_ONLY=false
@@ -340,6 +341,7 @@ HomeProxy=${ENABLE_HOMEPROXY}
 Adbyby Plus=${ENABLE_ADBYBY_PLUS}
 Original Modem=${ENABLE_ORIGINAL_MODEM}
 EasyMesh=${ENABLE_EASYMESH}
+MWAN3=${ENABLE_MWAN3}
 GOPROXY=${GOPROXY}
 GOSUMDB=${GOSUMDB}
 DOWNLOAD_MIRROR=${DOWNLOAD_MIRROR}
@@ -1117,6 +1119,11 @@ install_selected_packages() {
     feed_install_pkg wpad-mesh-openssl
   fi
 
+  if is_true "$ENABLE_MWAN3"; then
+    feed_install_pkg mwan3
+    feed_install_pkg luci-app-mwan3
+  fi
+
   if is_true "$ENABLE_MOSDNS"; then
     require_package_file "MosDNS LuCI" "package/mosdns/luci-app-mosdns/Makefile"
     require_package_file "MosDNS core" "package/mosdns/mosdns/Makefile"
@@ -1178,6 +1185,46 @@ enable_easymesh_stack_config() {
   config_enable PACKAGE_luci-app-mtwifi-cfg
   config_enable PACKAGE_luci-i18n-mtwifi-cfg-zh-cn
   config_enable PACKAGE_mtwifi-cfg
+}
+
+# Enable the full MWAN3 stack: kernel netfilter modules, iptables userspace
+# extensions, ipset, VRF support, and LuCI integration.
+# - kmod-vrf needs KERNEL_NET_L3_MASTER_DEV, otherwise LuCI's device add dialog
+#   prompts "需要 kmod-vrf" and the package remains unbuildable.
+# - kmod-ipt-ipset / -conntrack-extra / -ipopt must be selected at build time
+#   so they land in the image; otherwise users hit "依赖的软件包 ... 在所有仓库都未提供"
+#   when trying to opkg-install luci-app-mwan3 at runtime.
+enable_mwan3_stack_config() {
+  # Kernel prerequisites for kmod-vrf
+  config_enable KERNEL_NET_L3_MASTER_DEV
+  # MWAN3 core + LuCI
+  config_enable PACKAGE_mwan3
+  config_enable PACKAGE_luci-app-mwan3
+  config_enable PACKAGE_luci-i18n-mwan3-zh-cn
+  # Userspace tools mwan3 invokes
+  config_enable PACKAGE_ip
+  config_enable PACKAGE_ip-full
+  config_enable PACKAGE_ipset
+  config_enable PACKAGE_iptables
+  config_enable PACKAGE_iptables-zz-legacy
+  config_enable PACKAGE_ip6tables
+  config_enable PACKAGE_jshn
+  # iptables userspace extensions required by mwan3 scripts
+  config_enable PACKAGE_iptables-mod-conntrack-extra
+  config_enable PACKAGE_iptables-mod-ipopt
+  # Kernel modules backing those extensions
+  config_enable PACKAGE_kmod-ipt-core
+  config_enable PACKAGE_kmod-ipt-conntrack
+  config_enable PACKAGE_kmod-ipt-conntrack-extra
+  config_enable PACKAGE_kmod-ipt-ipopt
+  config_enable PACKAGE_kmod-ipt-ipset
+  config_enable PACKAGE_kmod-ipt-raw
+  config_enable PACKAGE_kmod-nf-conntrack
+  config_enable PACKAGE_kmod-nf-conntrack6
+  config_enable PACKAGE_kmod-nf-conncount
+  config_enable PACKAGE_kmod-nfnetlink
+  # VRF support (needed by LuCI device dialog when adding VRF devices)
+  config_enable PACKAGE_kmod-vrf
 }
 
 enable_h5000m_wifi_driver_config() {
@@ -1384,6 +1431,36 @@ EOF
   if is_true "$ENABLE_EASYMESH"; then
     enable_easymesh_stack_config
   fi
+  if is_true "$ENABLE_MWAN3"; then
+    cat >> .config <<'EOF'
+CONFIG_KERNEL_NET_L3_MASTER_DEV=y
+CONFIG_PACKAGE_kmod-vrf=y
+CONFIG_PACKAGE_mwan3=y
+CONFIG_PACKAGE_luci-app-mwan3=y
+CONFIG_PACKAGE_luci-i18n-mwan3-zh-cn=y
+CONFIG_PACKAGE_ip=y
+CONFIG_PACKAGE_ip-full=y
+CONFIG_PACKAGE_ipset=y
+CONFIG_PACKAGE_iptables=y
+CONFIG_PACKAGE_iptables-zz-legacy=y
+CONFIG_PACKAGE_ip6tables=y
+CONFIG_PACKAGE_jshn=y
+CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
+CONFIG_PACKAGE_iptables-mod-ipopt=y
+CONFIG_PACKAGE_kmod-ipt-core=y
+CONFIG_PACKAGE_kmod-ipt-conntrack=y
+CONFIG_PACKAGE_kmod-ipt-conntrack-extra=y
+CONFIG_PACKAGE_kmod-ipt-ipopt=y
+CONFIG_PACKAGE_kmod-ipt-ipset=y
+CONFIG_PACKAGE_kmod-ipt-raw=y
+CONFIG_PACKAGE_kmod-nf-conntrack=y
+CONFIG_PACKAGE_kmod-nf-conntrack6=y
+CONFIG_PACKAGE_kmod-nf-conncount=y
+CONFIG_PACKAGE_kmod-nfnetlink=y
+EOF
+  else
+    disabled_pkgs+=("mwan3" "luci-app-mwan3" "luci-i18n-mwan3-zh-cn")
+  fi
   is_true "$ENABLE_ADBYBY_PLUS" && { echo "CONFIG_PACKAGE_luci-app-adbyby-plus=y" >> .config; echo "CONFIG_PACKAGE_luci-i18n-adbyby-plus-zh-cn=y" >> .config; echo "CONFIG_PACKAGE_ipset=y" >> .config; } || disabled_pkgs+=("luci-app-adbyby-plus" "luci-i18n-adbyby-plus-zh-cn")
 
   if is_true "$ENABLE_DOCKERMAN"; then
@@ -1474,6 +1551,10 @@ EOF
     enable_easymesh_stack_config
   fi
 
+  if is_true "$ENABLE_MWAN3"; then
+    enable_mwan3_stack_config
+  fi
+
   if is_true "$ENABLE_HOMEPROXY"; then
     config_enable PACKAGE_luci-app-homeproxy
     config_enable PACKAGE_luci-i18n-homeproxy-zh-cn
@@ -1531,6 +1612,20 @@ EOF
   verify_enabled_pkg "Adbyby Plus zh-cn" "luci-i18n-adbyby-plus-zh-cn" "$ENABLE_ADBYBY_PLUS"
   verify_enabled_pkg "EasyMesh mesh daemon" "mesh11sd" "$ENABLE_EASYMESH"
   verify_enabled_pkg "EasyMesh wpad mesh" "wpad-mesh-openssl" "$ENABLE_EASYMESH"
+  verify_enabled_pkg "MWAN3 core" "mwan3" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 LuCI" "luci-app-mwan3" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 zh-cn" "luci-i18n-mwan3-zh-cn" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 ipset userspace" "ipset" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 iptables" "iptables" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 iptables-mod-conntrack-extra" "iptables-mod-conntrack-extra" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 iptables-mod-ipopt" "iptables-mod-ipopt" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 kmod-ipt-conntrack-extra" "kmod-ipt-conntrack-extra" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 kmod-ipt-ipopt" "kmod-ipt-ipopt" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 kmod-ipt-ipset" "kmod-ipt-ipset" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 kmod-vrf" "kmod-vrf" "$ENABLE_MWAN3"
+  if is_true "$ENABLE_MWAN3"; then
+    verify_config_symbol "MWAN3 VRF kernel prereq" "CONFIG_KERNEL_NET_L3_MASTER_DEV=y"
+  fi
   verify_enabled_pkg "MT WiFi zh-cn" "luci-i18n-mtwifi-cfg-zh-cn" true
   verify_config_symbol "H5000M USE_RFKILL dependency" "CONFIG_USE_RFKILL=y"
   verify_enabled_pkg "H5000M blkid dependency" "blkid" true
