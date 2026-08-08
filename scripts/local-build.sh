@@ -1064,6 +1064,43 @@ apply_package_fixes() {
   fi
 
   [ -f "package/mtk/drivers/mt_hwifi/Makefile" ] && sed -i 's/+kmod-mt_wifi_osal//g' "package/mtk/drivers/mt_hwifi/Makefile" || true
+
+  # luci-app-turboacc-mtk and luci-app-Airpifanctrl are not in the upstream
+  # feeds wired up in feeds.conf.default (immortalwrt-24.10 + openwrt routing +
+  # telephony + nikki + qmodem). Without these clones, both CONFIG_PACKAGE
+  # lines in h5000m.extra.config get silently dropped by make defconfig, so
+  # the LuCI Network Acceleration / Fan control panels are absent even
+  # though .config requests them.
+  #
+  # Both apps are pure LuCI + UCI; turboacc toggles kernel HNAT/SFE/Shortcut
+  # flags via UCI -> sysfs and exposes buttons to clear conntrack / reset
+  # the offload engine; Airpifanctrl fans out PWM via sysfs. So we can drop
+  # them under package/mtk/applications/<name>/ and they will be picked up
+  # by ./scripts/feeds install as plain package directories.
+  if [ ! -d "package/mtk/applications/luci-app-turboacc-mtk" ]; then
+    rm -rf /tmp/luci-app-turboacc-mtk
+    git_clone_retry https://github.com/hanwckf/immortalwrt-mt798x.git master /tmp/luci-app-turboacc-mtk 1 || \
+      log "WARNING: failed to clone luci-app-turboacc-mtk; LuCI network acceleration panel will be missing"
+    if [ -d "/tmp/luci-app-turboacc-mtk/package/mtk/applications/luci-app-turboacc-mtk" ]; then
+      mkdir -p package/mtk/applications
+      cp -r /tmp/luci-app-turboacc-mtk/package/mtk/applications/luci-app-turboacc-mtk \
+        package/mtk/applications/luci-app-turboacc-mtk
+    fi
+    rm -rf /tmp/luci-app-turboacc-mtk
+  fi
+  if [ ! -d "package/mtk/applications/luci-app-Airpifanctrl" ]; then
+    rm -rf /tmp/luci-app-Airpifanctrl
+    # Airpifanctrl lived in the older padavanonly/immortalwrt-mt798x-6.6
+    # branch; fetch that repo and copy the application subdir.
+    git_clone_retry https://github.com/padavanonly/immortalwrt-mt798x-6.6.git mt798x-mt799x-6.6-mtwifi /tmp/luci-app-Airpifanctrl 1 || \
+      log "WARNING: failed to clone luci-app-Airpifanctrl; LuCI fan control panel will be missing"
+    if [ -d "/tmp/luci-app-Airpifanctrl/package/mtk/applications/luci-app-Airpifanctrl" ]; then
+      mkdir -p package/mtk/applications
+      cp -r /tmp/luci-app-Airpifanctrl/package/mtk/applications/luci-app-Airpifanctrl \
+        package/mtk/applications/luci-app-Airpifanctrl
+    fi
+    rm -rf /tmp/luci-app-Airpifanctrl
+  fi
 }
 
 feed_install_pkg() {
@@ -1722,6 +1759,14 @@ EOF
     verify_config_symbol "MWAN3 VRF kernel prereq" "CONFIG_KERNEL_NET_L3_MASTER_DEV=y"
   fi
   verify_enabled_pkg "MT WiFi zh-cn" "luci-i18n-mtwifi-cfg-zh-cn" true
+  # Network acceleration (turboacc-mtk) and fan control (Airpifanctrl) are
+  # always-on base options in h5000m.extra.config; if the upstream package
+  # trees got renamed/moved the clones in apply_package_fixes will be
+  # missing and these checks will fail loudly instead of silently dropping
+  # the .config symbol.
+  verify_enabled_pkg "turboacc-mtk LuCI" "luci-app-turboacc-mtk" true
+  verify_enabled_pkg "Airpifanctrl LuCI" "luci-app-Airpifanctrl" true
+  verify_enabled_pkg "kmod-mediatek_hnat" "kmod-mediatek_hnat" true
   verify_config_symbol "H5000M USE_RFKILL dependency" "CONFIG_USE_RFKILL=y"
   verify_enabled_pkg "H5000M blkid dependency" "blkid" true
   verify_enabled_pkg "H5000M MT WiFi common" "kmod-mt_wifi_cmn" true
