@@ -1205,7 +1205,12 @@ enable_mwan3_stack_config() {
   config_enable PACKAGE_ip
   config_enable PACKAGE_ip-full
   config_enable PACKAGE_ipset
-  config_enable PACKAGE_iptables
+  # 'iptables' is a virtual package provided by either iptables-nft or
+  # iptables-zz-legacy. Selecting CONFIG_PACKAGE_iptables=y directly gets
+  # dropped by make defconfig once firewall4 has already picked iptables-nft.
+  # Pick both real variants so mwan3's legacy iptables calls work and the
+  # fw4-required nftables frontend stays available.
+  config_enable PACKAGE_iptables-nft
   config_enable PACKAGE_iptables-zz-legacy
   config_enable PACKAGE_ip6tables
   config_enable PACKAGE_jshn
@@ -1441,7 +1446,7 @@ CONFIG_PACKAGE_luci-i18n-mwan3-zh-cn=y
 CONFIG_PACKAGE_ip=y
 CONFIG_PACKAGE_ip-full=y
 CONFIG_PACKAGE_ipset=y
-CONFIG_PACKAGE_iptables=y
+CONFIG_PACKAGE_iptables-nft=y
 CONFIG_PACKAGE_iptables-zz-legacy=y
 CONFIG_PACKAGE_ip6tables=y
 CONFIG_PACKAGE_jshn=y
@@ -1616,7 +1621,8 @@ EOF
   verify_enabled_pkg "MWAN3 LuCI" "luci-app-mwan3" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 zh-cn" "luci-i18n-mwan3-zh-cn" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 ipset userspace" "ipset" "$ENABLE_MWAN3"
-  verify_enabled_pkg "MWAN3 iptables" "iptables" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 iptables-nft" "iptables-nft" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 iptables-zz-legacy" "iptables-zz-legacy" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-conntrack-extra" "iptables-mod-conntrack-extra" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-ipopt" "iptables-mod-ipopt" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 kmod-ipt-conntrack-extra" "kmod-ipt-conntrack-extra" "$ENABLE_MWAN3"
