@@ -129,13 +129,12 @@ env:
   GOSUMDB: sum.golang.google.cn
   DOWNLOAD_MIRROR: "https://mirrors.tuna.tsinghua.edu.cn/openwrt/sources;https://mirrors.ustc.edu.cn/openwrt/sources;https://mirrors.bfsu.edu.cn/openwrt/sources"
   GITHUB_PROXY_PREFIXES: "https://ghfast.top/ https://gh-proxy.com/ https://gh.llkk.cc/"
-  # 运行器选择辅助变量：runner_type=self-hosted 时使用 self_hosted_labels，否则用 github-hosted 默认
-  RUNNER_LABELS_JSON: ${{ format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04') }}
 
 jobs:
   # ─── 覆盖性配置测试（与固件编译并行，不阻塞最终 Release）─────────────────
   config-coverage:
-    runs-on: ${{ fromJSON(env.RUNNER_LABELS_JSON) }}
+    # runs-on 不允许引用顶层 env，直接在这里内联 fromJSON 表达式
+    runs-on: ${{ fromJSON(format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04')) }}
     timeout-minutes: 60
     if: github.event.inputs.run_config_coverage == true
     steps:
@@ -220,7 +219,8 @@ jobs:
 
   # ─── 固件编译（与 coverage 并行）──────────────────────────────────────
   build:
-    runs-on: ${{ fromJSON(env.RUNNER_LABELS_JSON) }}
+    # runs-on 不允许引用顶层 env，直接在这里内联 fromJSON 表达式
+    runs-on: ${{ fromJSON(format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04')) }}
     timeout-minutes: 600
     steps:
       - name: 检出代码
