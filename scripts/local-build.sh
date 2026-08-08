@@ -1239,6 +1239,20 @@ enable_mwan3_stack_config() {
   # Same story for IPv6: 'ip6tables' is virtual; select both real variants.
   config_enable PACKAGE_ip6tables-nft
   config_enable PACKAGE_ip6tables-zz-legacy
+  # IPv6 kernel modules backing ip6tables. mwan3 v2.11.16 (when IPV6 is
+  # enabled) builds mwan3_hook with -p ipv6-icmp -m icmp6 --icmpv6-type
+  # 133/134/135/136/137 (NDP RS/RA/NS/NA), creates IPv6 ipset tables
+  # (family inet6), and steers IPv6 routing via ip -6. None of those work
+  # if kmod-ip6tables / kmod-ipt-nat6 / libip6tc are absent from the image.
+  config_enable PACKAGE_kmod-ip6tables
+  config_enable PACKAGE_kmod-ip6tables-extra
+  config_enable PACKAGE_kmod-ipt-nat6
+  config_enable PACKAGE_kmod-nf-nat6
+  config_enable PACKAGE_kmod-nf-ipt6
+  config_enable PACKAGE_kmod-ip6-tunnel
+  config_enable PACKAGE_libip6tc
+  config_enable PACKAGE_ip6tables-mod-nat
+  config_enable PACKAGE_ip6tables-extra
   config_enable PACKAGE_jshn
   # iptables userspace extensions required by mwan3 scripts
   config_enable PACKAGE_iptables-mod-conntrack-extra
@@ -1491,6 +1505,17 @@ CONFIG_PACKAGE_iptables-nft=y
 CONFIG_PACKAGE_iptables-zz-legacy=y
 CONFIG_PACKAGE_ip6tables-nft=y
 CONFIG_PACKAGE_ip6tables-zz-legacy=y
+# IPv6 netfilter kernel + userspace pieces needed by mwan3 in IPV6 mode
+# (NDP-matching ip6tables hooks, IPv6 NAT, ipset family inet6).
+CONFIG_PACKAGE_kmod-ip6tables=y
+CONFIG_PACKAGE_kmod-ip6tables-extra=y
+CONFIG_PACKAGE_kmod-ipt-nat6=y
+CONFIG_PACKAGE_kmod-nf-nat6=y
+CONFIG_PACKAGE_kmod-nf-ipt6=y
+CONFIG_PACKAGE_kmod-ip6-tunnel=y
+CONFIG_PACKAGE_libip6tc=y
+CONFIG_PACKAGE_ip6tables-mod-nat=y
+CONFIG_PACKAGE_ip6tables-extra=y
 CONFIG_PACKAGE_jshn=y
 CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
 CONFIG_PACKAGE_iptables-mod-ipopt=y
@@ -1680,6 +1705,13 @@ EOF
   verify_enabled_pkg "MWAN3 iptables-zz-legacy" "iptables-zz-legacy" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 ip6tables-nft" "ip6tables-nft" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 ip6tables-zz-legacy" "ip6tables-zz-legacy" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 IPv6 netfilter core" "kmod-ip6tables" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 IPv6 icmp6 match" "kmod-ip6tables-extra" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 IPv6 NAT" "kmod-ipt-nat6" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 IPv6 NAT core" "kmod-nf-nat6" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 IPv6 iptables core" "kmod-nf-ipt6" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 libip6tc" "libip6tc" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 ip6tables-mod-nat" "ip6tables-mod-nat" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-conntrack-extra" "iptables-mod-conntrack-extra" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-ipopt" "iptables-mod-ipopt" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 kmod-ipt-conntrack-extra" "kmod-ipt-conntrack-extra" "$ENABLE_MWAN3"

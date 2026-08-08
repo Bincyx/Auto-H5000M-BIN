@@ -255,6 +255,8 @@ EasyMesh / mesh 支持：上游 routing feed 的 `mesh11sd`（动态 802.11s mes
 
 MWAN3 多 WAN 支持：`ENABLE_MWAN3=true` 会同时启用 `mwan3` 后台、`luci-app-mwan3` 与中文包、`kmod-vrf`（同时设置 `CONFIG_KERNEL_NET_L3_MASTER_DEV=y` 解锁该内核符号，修复 LuCI 添加设备时提示需要 `kmod-vrf` 的问题），以及 `kmod-ipt-ipset` / `kmod-ipt-conntrack-extra` / `kmod-ipt-ipopt` / `kmod-ipt-raw` / `kmod-nf-conncount` 等内核模块和 `iptables-mod-conntrack-extra` / `iptables-mod-ipopt` / `ipset` 等用户态组件。这能避免运行时用 opkg 安装 `luci-app-mwan3` 时反复报 "依赖的软件包 kmod-ipt-* 在所有仓库都未提供"。所有 kmod 都在 image 构建时打入，不需要刷机后手动装。
 
+IPv6 基础设施：上游 `mt7987_mt7992.config` 默认开启了 `IPV6=y` 但保留 IPv6 netfilter 链路（kmod-ip6tables / kmod-ipt-nat6 / libip6tc / ip6tables-extra 等）全部 `is not set`。本项目同时启用 mwan3（v2.11.16 在 IPV6 模式会创建带 `-p ipv6-icmp --icmpv6-type 133/134/135/136/137` 的 mwan3_hook 链）和多代组件（Nikki / HomeProxy / MosDNS），若不补齐 IPv6 netfilter 栈，运行时会拿到 `can't initialize iptables table 'filter'+ 模块缺失` 以及 mwan3 IPv6 路径静默不生效。`h5000m.extra.config` 默认补齐 `kmod-nf-ipt6` / `kmod-ip6tables` / `kmod-ip6tables-extra` / `kmod-ipt-nat6` / `kmod-nf-nat6` / `kmod-ip6-tunnel` / `libip6tc` / `ip6tables-mod-nat` / `ip6tables-extra` / `ip6tables-nft` / `ip6tables-zz-legacy`，使 LAN/WAN IPv6 RA+DHCPv6、NDP、IPv6 NAT、fw4 IPv6 转发均能工作。
+
 ---
 
 ## 许可证
