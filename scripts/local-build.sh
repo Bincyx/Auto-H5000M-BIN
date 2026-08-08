@@ -1170,6 +1170,9 @@ enable_upnp_stack_config() {
 }
 
 enable_easymesh_stack_config() {
+  # wpad-* are VARIANTs of the same hostapd source: only one TLS backend and
+  # one feature set can be selected. Disable every other combination so
+  # defconfig cannot silently pick mbedtls/wolfssl alongside openssl.
   config_disable PACKAGE_wpad-basic-mbedtls
   config_disable PACKAGE_wpad-basic-openssl
   config_disable PACKAGE_wpad-basic-wolfssl
@@ -1185,6 +1188,26 @@ enable_easymesh_stack_config() {
   config_enable PACKAGE_luci-app-mtwifi-cfg
   config_enable PACKAGE_luci-i18n-mtwifi-cfg-zh-cn
   config_enable PACKAGE_mtwifi-cfg
+  # MTK MT7992 MAP (Multi-AP / EasyMesh) kernel-side feature switches.
+  # The mt_wifi7 driver exposes them via PKG_KCONFIG (CONFIG_MTK_WIFI7_*).
+  # defconfig already enables MAP_SUPPORT (MAP R1); turning on R2..R6 plus
+  # VENDOR/HOSTAPD gives full EasyMesh certification features: backhaul
+  # steering, 6E MAP, vendor-specific MAP profile, and hostapd MAP R4/R5/R6
+  # message handling. These only affect mt_wifi7.kconfig, they do not change
+  # the kernel itself or the wpad selection.
+  config_enable MTK_WIFI7_MAP_SUPPORT
+  config_enable MTK_WIFI7_MAP_R2_VER_SUPPORT
+  config_enable MTK_WIFI7_MAP_R3_VER_SUPPORT
+  config_enable MTK_WIFI7_MAP_R4_VER_SUPPORT
+  config_enable MTK_WIFI7_MAP_R5_VER_SUPPORT
+  config_enable MTK_WIFI7_MAP_R2_6E_SUPPORT
+  config_enable MTK_WIFI7_MAP_R3_6E_SUPPORT
+  config_enable MTK_WIFI7_MAP_R6_SUPPORT
+  config_enable MTK_WIFI7_MAP_VENDOR_SUPPORT
+  config_enable MTK_WIFI7_MAP_HOSTAPD_SUPPORT
+  # Bridge netfilter is required for bridge-mode mesh forwarding and EAPOL
+  # relay used by 802.11s / EasyMesh.
+  config_enable PACKAGE_kmod-br-netfilter
 }
 
 # Enable the full MWAN3 stack: kernel netfilter modules, iptables userspace
@@ -1201,8 +1224,9 @@ enable_mwan3_stack_config() {
   config_enable PACKAGE_mwan3
   config_enable PACKAGE_luci-app-mwan3
   config_enable PACKAGE_luci-i18n-mwan3-zh-cn
-  # Userspace tools mwan3 invokes
-  config_enable PACKAGE_ip
+  # Userspace tools mwan3 invokes.
+  # 'ip' is a virtual package provided by ip-tiny (default) or ip-full.
+  # We pick ip-full explicitly so mwan3 gets the full iproute2 feature set.
   config_enable PACKAGE_ip-full
   config_enable PACKAGE_ipset
   # 'iptables' is a virtual package provided by either iptables-nft or
@@ -1212,7 +1236,9 @@ enable_mwan3_stack_config() {
   # fw4-required nftables frontend stays available.
   config_enable PACKAGE_iptables-nft
   config_enable PACKAGE_iptables-zz-legacy
-  config_enable PACKAGE_ip6tables
+  # Same story for IPv6: 'ip6tables' is virtual; select both real variants.
+  config_enable PACKAGE_ip6tables-nft
+  config_enable PACKAGE_ip6tables-zz-legacy
   config_enable PACKAGE_jshn
   # iptables userspace extensions required by mwan3 scripts
   config_enable PACKAGE_iptables-mod-conntrack-extra
@@ -1382,6 +1408,22 @@ CONFIG_PACKAGE_wpad-mesh-openssl=y
 CONFIG_PACKAGE_luci-app-mtwifi-cfg=y
 CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=y
 CONFIG_PACKAGE_mtwifi-cfg=y
+# MTK MT7992 MAP (EasyMesh) feature switches: enable R1..R6 plus
+# vendor-specific and hostapd extensions so the MAP-certified feature set
+# compiles into mt7992.ko. Default mt7987_mt7992.config already selects
+# MAP_SUPPORT (R1); we expand it for full Multi-AP behavior.
+CONFIG_MTK_WIFI7_MAP_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R2_VER_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R3_VER_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R4_VER_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R5_VER_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R6_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R2_6E_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_R3_6E_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_VENDOR_SUPPORT=y
+CONFIG_MTK_WIFI7_MAP_HOSTAPD_SUPPORT=y
+# Bridge netfilter for 802.11s / EAPOL relay
+CONFIG_PACKAGE_kmod-br-netfilter=y
 EOF
   else
     disabled_pkgs+=("mesh11sd" "wpad-mesh-openssl")
@@ -1443,12 +1485,12 @@ CONFIG_PACKAGE_kmod-vrf=y
 CONFIG_PACKAGE_mwan3=y
 CONFIG_PACKAGE_luci-app-mwan3=y
 CONFIG_PACKAGE_luci-i18n-mwan3-zh-cn=y
-CONFIG_PACKAGE_ip=y
 CONFIG_PACKAGE_ip-full=y
 CONFIG_PACKAGE_ipset=y
 CONFIG_PACKAGE_iptables-nft=y
 CONFIG_PACKAGE_iptables-zz-legacy=y
-CONFIG_PACKAGE_ip6tables=y
+CONFIG_PACKAGE_ip6tables-nft=y
+CONFIG_PACKAGE_ip6tables-zz-legacy=y
 CONFIG_PACKAGE_jshn=y
 CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
 CONFIG_PACKAGE_iptables-mod-ipopt=y
@@ -1617,12 +1659,27 @@ EOF
   verify_enabled_pkg "Adbyby Plus zh-cn" "luci-i18n-adbyby-plus-zh-cn" "$ENABLE_ADBYBY_PLUS"
   verify_enabled_pkg "EasyMesh mesh daemon" "mesh11sd" "$ENABLE_EASYMESH"
   verify_enabled_pkg "EasyMesh wpad mesh" "wpad-mesh-openssl" "$ENABLE_EASYMESH"
+  verify_enabled_pkg "EasyMesh bridge netfilter" "kmod-br-netfilter" "$ENABLE_EASYMESH"
+  verify_enabled_pkg "EasyMesh MTK MT7992 driver" "kmod-mt7992" "$ENABLE_EASYMESH"
+  verify_enabled_pkg "EasyMesh MTK MT799A driver" "kmod-mt799a" "$ENABLE_EASYMESH"
+  if is_true "$ENABLE_EASYMESH"; then
+    verify_config_symbol "EasyMesh MTK MAP R1 base" "CONFIG_MTK_WIFI7_MAP_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP R2" "CONFIG_MTK_WIFI7_MAP_R2_VER_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP R3" "CONFIG_MTK_WIFI7_MAP_R3_VER_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP R4" "CONFIG_MTK_WIFI7_MAP_R4_VER_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP R5" "CONFIG_MTK_WIFI7_MAP_R5_VER_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP R6" "CONFIG_MTK_WIFI7_MAP_R6_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP vendor" "CONFIG_MTK_WIFI7_MAP_VENDOR_SUPPORT=y"
+    verify_config_symbol "EasyMesh MTK MAP hostapd" "CONFIG_MTK_WIFI7_MAP_HOSTAPD_SUPPORT=y"
+  fi
   verify_enabled_pkg "MWAN3 core" "mwan3" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 LuCI" "luci-app-mwan3" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 zh-cn" "luci-i18n-mwan3-zh-cn" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 ipset userspace" "ipset" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-nft" "iptables-nft" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-zz-legacy" "iptables-zz-legacy" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 ip6tables-nft" "ip6tables-nft" "$ENABLE_MWAN3"
+  verify_enabled_pkg "MWAN3 ip6tables-zz-legacy" "ip6tables-zz-legacy" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-conntrack-extra" "iptables-mod-conntrack-extra" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 iptables-mod-ipopt" "iptables-mod-ipopt" "$ENABLE_MWAN3"
   verify_enabled_pkg "MWAN3 kmod-ipt-conntrack-extra" "kmod-ipt-conntrack-extra" "$ENABLE_MWAN3"
