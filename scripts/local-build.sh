@@ -662,6 +662,35 @@ patch_mtwifi_apcli_bssid_budget() {
   fi
 }
 
+# mt_wifi7's sta_mgmt_assoc.c guards the easy-mesh / wpa_supplicant block as
+#   #if defined(CONFIG_MAP_SUPPORT) && defined(MTK_HOSTAPD_SUPPORT)
+# but reads pStaCfg->wpa_supplicant_info.WpaSupplicantUP inside, which only
+# exists in struct _STA_ADMIN_CONFIG when
+#   #ifdef RT_CFG80211_SUPPORT
+#   #if defined(CONFIG_STA_SUPPORT) || defined(APCLI_CFG80211_SUPPORT)
+# is satisfied (rtmp.h). When the project turns MTK_WIFI7_MAP_HOSTAPD_SUPPORT
+# on (EasyMesh full feature set) but leaves MT_STA_SUPPORT / APCLI_SUPPLICANT
+# disabled (default AP-only profile), MTK_HOSTAPD_SUPPORT is defined while
+# APCLI_CFG80211_SUPPORT is not - the struct member is absent and the build
+# fails with:
+#   error: 'struct _STA_ADMIN_CONFIG' has no member named 'wpa_supplicant_info'
+# Tighten the existing guard so the body only compiles when the struct
+# member is actually present. This is a no-op for the upstream target
+# (which always enables MT_STA_SUPPORT/APCLI_CFG80211_SUPPORT) and lets us
+# keep the full EasyMesh feature set on AP-only builds.
+patch_mtwifi7_sta_mgmt_assoc_hostapd_guard() {
+  local f="package/mtk/drivers/mt_wifi7/src/mt_wifi/common/fsm/sta_mgmt_assoc.c"
+  [ -f "$f" ] || return 0
+
+  if grep -q '#if defined(CONFIG_MAP_SUPPORT) && defined(MTK_HOSTAPD_SUPPORT) && defined(APCLI_CFG80211_SUPPORT)' "$f"; then
+    log "mt_wifi7 sta_mgmt_assoc.c APCLI_CFG80211 hostapd guard already applied"
+    return 0
+  fi
+
+  log "Tightening mt_wifi7 sta_mgmt_assoc.c MTK_HOSTAPD guard with APCLI_CFG80211_SUPPORT"
+  sed -i 's|#if defined(CONFIG_MAP_SUPPORT) && defined(MTK_HOSTAPD_SUPPORT)|#if defined(CONFIG_MAP_SUPPORT) \&\& defined(MTK_HOSTAPD_SUPPORT) \&\& defined(APCLI_CFG80211_SUPPORT)|g' "$f"
+}
+
 patch_mtk_wifi_utility_rbus_for_h5000m() {
   local rbus_patch="target/linux/mediatek/patches-6.6/0101-add-mtk-wifi-utility-rbus.patch"
   [ -f "$rbus_patch" ] || return 0
@@ -964,6 +993,7 @@ apply_package_fixes() {
   patch_mtk_wifi_utility_rbus_for_h5000m
   patch_mtwifi_apcli_bssid_budget
   verify_mtwifi_patch
+  patch_mtwifi7_sta_mgmt_assoc_hostapd_guard
   ensure_external_luci_i18n_packages
   patch_qmodem_depends
 
