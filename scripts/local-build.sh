@@ -804,7 +804,6 @@ ensure_prebuilt_luci_app_package() {
   local version="$2"
   local ipk_url="$3"
   local title="$4"
-  local extra_depends="$5"
   local source_name="${ipk_url##*/}"
   local pkg_dir="package/prebuilt-luci-app/$pkg_name"
   local source_urls
@@ -831,7 +830,7 @@ define Package/$pkg_name
   CATEGORY:=LuCI
   SUBMENU:=Applications
   TITLE:=$title
-  DEPENDS:=+libc +ca-certs +curl +luci-lua-runtime${extra_depends:+ $extra_depends}
+  DEPENDS:=+libc +ca-certs +curl +luci-lua-runtime
   PKGARCH:=all
 endef
 
