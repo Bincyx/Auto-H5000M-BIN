@@ -231,7 +231,14 @@ git_clone_retry() {
     [ -n "$candidate" ] || continue
     log "Cloning $(basename "$url") from $candidate"
     if run_with_timeout "$GIT_TIMEOUT" "git clone $(basename "$url")" git clone "${args[@]}" "$candidate" "$dest"; then
-      return 0
+
+    TARGET_IP="192.168.1.1"
+      if [ -f "$dest/package/base-files/files/bin/config_generate" ]; then
+        sed -i "s/192.168.6.1/${TARGET_IP}/g" "$dest/package/base-files/files/bin/config_generate"
+        log "✅ Successfully changed default router IP to $TARGET_IP"
+      fi
+	  
+	  return 0
     fi
     rm -rf "$dest"
   done < <(github_url_candidates "$url")
