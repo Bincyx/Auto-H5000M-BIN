@@ -133,7 +133,6 @@ env:
 jobs:
   # ─── 覆盖性配置测试（与固件编译并行，不阻塞最终 Release）─────────────────
   config-coverage:
-    # runs-on 不允许引用顶层 env，直接在这里内联 fromJSON 表达式
     runs-on: ${{ fromJSON(format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04')) }}
     timeout-minutes: 60
     if: github.event.inputs.run_config_coverage == true
@@ -197,7 +196,7 @@ jobs:
             gettext unzip file wget curl rsync zstd golang-go rustc cargo 2>&1 | tail -3
 
       - name: 恢复构建缓存（加速重复检查）
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             immortalwrt-coverage/dl
@@ -219,7 +218,6 @@ jobs:
 
   # ─── 固件编译（与 coverage 并行）──────────────────────────────────────
   build:
-    # runs-on 不允许引用顶层 env，直接在这里内联 fromJSON 表达式
     runs-on: ${{ fromJSON(format('["{0}"]', github.event.inputs.runner_type == 'self-hosted' && github.event.inputs.self_hosted_labels || 'ubuntu-24.04')) }}
     timeout-minutes: 600
     steps:
@@ -310,7 +308,7 @@ jobs:
           save: true
 
       - name: 恢复构建缓存
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ${{ env.SOURCE_DIR }}/dl
@@ -357,7 +355,7 @@ jobs:
           echo "build_time=$(date '+%Y-%m-%d %H:%M:%S %Z')" >> "$GITHUB_OUTPUT"
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ImmortalWrt-H5000M-${{ github.run_number }}
           path: artifacts/
